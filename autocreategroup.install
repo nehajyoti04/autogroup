@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * Defines information schema for autocreategroup
+ */
+
+/**
+ * Implements of hook_schema().
+ */
+function autocreategroup_schema() {
+  $schema['autocreategroup'] = array(
+    'description' => 'Stores mapping of a node with its auto created group.',
+    'fields' => array(
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "Active Node NID.",
+      ),
+      'group_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "Group Node NID.",
+      ),
+    ),
+    'primary key' => array(
+      'nid',
+      'group_nid'
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function autocreategroup_update_7010() {
+  drupal_set_message('Auto create Group successfully upgraded.');
+}

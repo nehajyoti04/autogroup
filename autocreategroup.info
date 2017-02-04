@@ -1,0 +1,13 @@
+name = "Automatically Create Groups"
+description = "Automatically create a group for different content types"
+core = 7.x
+dependencies[] = og
+package = "Organic groups"
+files[] = og.module
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "autogroup"
+datestamp = "1380554839"
+

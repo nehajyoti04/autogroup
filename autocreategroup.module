@@ -1,0 +1,407 @@
+<?php
+
+/**
+ * @file
+ * Allows administrators to automatically create groups
+ */
+
+/**
+ * Implements of hook_perm().
+ */
+function autocreategroup_permission() {
+  return array(
+    'administer autocreategroup' => array(
+      'title' => t('administer autocreategroup'),
+      'description' => t('Administers autocreatgroup'),
+    ),
+    'administer automatic creation of groups' => array(
+      'title' => t('administer automatic creation of groups'),
+      'description' => t('Administers automatically creation of groups.'),
+    )
+  );
+}
+
+/**
+ * Implements of hook_menu().
+ */
+function autocreategroup_menu() {
+
+  // General Settings to assocaite groups with active content types
+  $items['admin/config/autocreategroup'] = array(
+    'title' => 'AutoCreateGroup',
+    'page callback' => 'autocreategroup_settings',
+    'page arguments' => array('general'),
+    'access arguments' => array('administer autocreategroup'),
+    'file' => 'autocreategroup.admin.inc',
+  );
+
+  // General Settings to assocaite groups with active content types
+  $items['admin/config/autocreategroup/general'] = array(
+    'title' => 'General Settings',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  // Advanced Settings to customize every combination of active and group content types
+  $items['admin/config/autocreategroup/advanced'] = array(
+    'title' => 'Advanced Settings',
+    'page callback' => 'autocreategroup_settings',
+    'page arguments' => array('advanced'),
+    'access arguments' => array('administer autocreategroup'),
+    'weight' => 1,
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'autocreategroup.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements of hook_theme().
+ */
+function autocreategroup_theme() {
+  return array(
+    'autocreategroup_title' => array(
+      'variables' => array(
+        'type' => NULL,
+        'nid' => NULL
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_nodeapi_N().
+ *
+ * START HERE.
+ */
+
+/**
+ * Implements hook_node_view().
+ *
+ * @param stdclass Object $node
+ * @param String $view_mode
+ */
+function autocreategroup_node_view($node, $view_mode = 'full') {
+  // print '<pre>'; print_r($node); print '</pre>';exit;
+  $active_types = _autocreategroup_classify_content_types('active_list');
+  $group_types = _autocreategroup_classify_content_types('group_list');
+
+  if (in_array($node->type, $active_types)) {
+    // $has_related_group = db_result(db_query("SELECT count(*) FROM {autocreategroup} WHERE nid = %d", $node->nid));
+    $has_related_group_query = db_select('autocreategroup');
+    $has_related_group_query->condition('nid', $node->nid)
+                            ->fields('autocreategroup', array('nid'));
+    // Get row count for current node.
+    $has_related_group = $has_related_group_query->execute()->rowCount();
+
+    if (!empty($has_related_group)) {
+      $node->content['autocreategroup_reference'] = array();
+      // $query = db_query("SELECT group_nid FROM {autocreategroup} WHERE nid = %d", $node->nid);
+      // $query = db_query("SELECT group_nid FROM {autocreategroup} WHERE nid = :nid", array(':nid' => $node->nid))->execute();
+      $query = db_select('autocreategroup');
+      $query->condition('nid', $node->nid)
+            ->fields('autocreategroup', array('group_nid'));
+      $query = $query->execute();
+
+      while ($result = $query->fetchAssoc()) {
+        $related_group = $result['group_nid'];
+        // $related_group_name = db_result(db_query("SELECT type FROM {node} WHERE nid = %d", $related_group));
+        $related_group_name_query = db_select('node');
+        $related_group_name_query->condition('nid', $related_group)
+              ->fields('node', array('type'));
+        $related_group_name = $related_group_name_query->execute()->fetchField();
+
+        // Theme output and add to $node.
+        $node->content['autocreategroup_reference'][] = array(
+          '#type' => 'item',
+          '#markup' => theme('autocreategroup_title', array('type' => $related_group_name, 'nid' => $related_group)),
+        );
+      }
+    }
+  }
+
+  if (in_array($node->type, $group_types)) {
+    // $has_related_content = db_result(db_query("SELECT count(*) FROM {autocreategroup} WHERE group_nid = %d", $node->nid));
+    $has_related_content_query = db_select('autocreategroup');
+    $has_related_content_query->condition('group_nid', $node->nid)
+                              ->fields('autocreategroup', array('nid'));
+    // Get row count for current node.
+    $has_related_content = $has_related_content_query->execute()->rowCount();
+
+    if (!empty($has_related_content)) {
+      // $related_content = db_result(db_query("SELECT nid FROM {autocreategroup} WHERE group_nid = %d", $node->nid));
+      $related_content = db_query("SELECT nid FROM {autocreategroup}
+        WHERE group_nid = :group_nid",
+        array(':group_nid' => $node->nid))
+        ->fetchField();
+
+      // $related_content_name = db_result(db_query("SELECT type FROM {node} WHERE nid = %d", $related_content));
+      $related_content_name = db_query("SELECT type FROM {node} WHERE nid = :nid",
+        array(':nid' => $related_content))->fetchField();
+
+      // Theme output and add to $node.
+      $node->content['autocreatgroup_reference'] = array(
+        '#type' => 'item',
+        '#markup' => theme('autocreategroup_title', array('type' => $related_content_name, 'nid' => $related_content)),
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_node_view().
+ *
+ * @param stdclass Object $node
+ * @param String $view_mode
+ */
+function autocreategroup_node_insert($node) {
+  // print '<pre>'; print_r($node); print '</pre>';exit;
+  $active_types = _autocreategroup_classify_content_types('active');
+  $group_types = _autocreategroup_classify_content_types('group');
+
+  foreach ($active_types AS $entity_details) {
+    if (strcmp($entity_details['bundle_name'], $node->type) == 0) {
+
+      $autocreategroups = variable_get($node->type . '_autocreategroups', '');
+      $do_autocreategroup = ($autocreategroups === '') ? 0 : 1;
+
+      if (!empty($do_autocreategroup)) {
+        if (is_array($autocreategroups)) {
+
+          foreach ($autocreategroups as $group) {
+            if ($group !== 0) {
+
+              // creating a node object
+              $group_node = new stdClass();
+              $group_node->status = 1;
+              $group_node->uid = $node->uid;
+              $group_node->type = $group;
+
+              // Define tokens to be replaced.
+              $tokens = array(
+                '[node-title]' => $node->title,
+              );
+
+              // assign node title using token replacement
+              $title = variable_get($node->type . '_' . $group . '_autocreategroup_og_title', '');
+              // $title = str_replace('[node-title]', $node->title, $title);
+              $title = strtr($title, $tokens);
+              $group_node->title = $title;
+
+              // assign description using token replacement
+              $description = variable_get($node->type . '_' . $group . '_autocreategroup_og_description', '');
+              // $description = str_replace('[node-title]', $node->title, $description);
+              $description = strtr($description, $tokens);
+              // $group_node->og_description = $description;
+              $group_node->body = $description;
+
+              // assign group checkbox value
+              $title = variable_get($node->type . '_' . $group . '_autocreategroup_og_' . OG_GROUP_FIELD, '');
+              // $title = str_replace('[node-title]', $node->title, $title);
+              $title = strtr($title, $tokens);
+              $group_node->OG_GROUP_FIELD = $title;
+
+              // assign membership type
+              /* $membership_type = variable_get($node->type . '_' . $group . '_autocreategroup_og_selective', '');
+              $group_node->og_selective = $membership_type;
+
+              // assign directory listing
+              $directory_listing = variable_get($node->type . '_' . $group . '_autocreategroup_og_directory', '');
+              $group_node->og_directory = $directory_listing;
+
+              // enable group on registration, if necessary
+              $registration = variable_get($node->type . '_' . $group . '_autocreategroup_og_register', '');
+              $group_node->og_register = $registration;
+
+              // assign private groups, if necessary
+              $private_group = variable_get($node->type . '_' . $group . '_autocreategroup_og_private', '');
+              $group_node->og_private = $private_group;*/
+
+              // save it and give it the rest of the attributes
+              node_save($group_node);
+
+              // save the relation of the group node with the parent node
+              $autocreategroup = new stdClass();
+              $autocreategroup->nid = $node->nid;
+              $autocreategroup->group_nid = $group_node->nid;
+              drupal_write_record('autocreategroup', $autocreategroup);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ *
+ * @param stdclass Object $node
+ */
+function autocreategroup_node_delete($node) {
+  $active_types = _autocreategroup_classify_content_types('active_list');
+  $group_types = _autocreategroup_classify_content_types('group_list');
+
+  // If currently deleting node is active/group bundle then delete its entry in autocreategroups table
+  if (in_array($node->type, $active_types)) {
+    db_delete('autocreategroup')
+      ->condition('nid', $node->nid)
+      ->execute();
+  }
+  elseif (in_array($node->type, $group_types)) {
+    db_delete('autocreategroup')
+      ->condition('group_nid', $node->nid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_nodeapi_N().
+ *
+ * END HERE.
+ */
+
+/**
+ * Modules function definition start here.
+ */
+
+/**
+ * Function to return Human name for a content type from the Machine name of a content type
+ */
+function _autocreategroup_get_bundle_name($type) {
+  $query = db_select('node_type', 'node_type');
+  $query->condition('type', $type)
+        ->fields('node_type', array('name'));
+  $name = $query->execute()->fetchField();
+
+  return $name;
+}
+
+/**
+ * Function to return active or group content types
+ *
+ * @todo
+ *   Add support for all entities.
+ */
+function _autocreategroup_classify_content_types($class = 'active') {
+  // Define variables to use further.
+  $types = array();
+  $types_list = array();
+  $enabled_types = array();
+  $enabled_types_list = array();
+
+  // Since OG module has changed his structure from a simple variable to a field in group field
+  // We will also need to change the retrieving process to work with it.
+
+  // Select all fields defined by OG module
+  $group_fields = og_fields_info();
+  unset($group_fields[OG_GROUP_FIELD]);
+  $group_fields_name = array_keys($group_fields);
+  $entity_info = entity_get_info();
+
+  // Get all available node types in site.
+  $bundles_data = node_type_get_types();
+  $bundles_list = array_keys($bundles_data);
+  $entity_type = 'node';
+
+  foreach ($bundles_list AS $bundle_name) {
+    $is_group = 0;
+
+    // Load all fields for current bundle
+    $all_fields_in_bundle = field_info_instances('node', $bundle_name);
+    // Get all fields name from current bundle
+    $all_fields = array_keys($all_fields_in_bundle);
+
+    // Loop through OG modules defined fields.
+    foreach ($group_fields_name as $og_field_name) {
+      // Current bundle is selected as group, but not main group.
+      if (in_array($og_field_name, $all_fields)) {
+        $is_group = 2;
+        break;
+      }
+    }
+
+    // Current bundle is selected as group content.
+    if (in_array(OG_GROUP_FIELD, $all_fields)) {
+      $is_group = 1;
+    }
+
+    // Retrieve field_info all bundles of specified entity_type
+    $bundles = field_info_bundles($entity_type);
+    // If current content type is not selected as group.
+    if ($is_group == 0) {
+      // Create an array which has content type with details, which are not selected for group
+      $types[$entity_type . '_' . $bundle_name] = array(
+        'entity' => $entity_info[$entity_type]['label'],
+        'entity_name' => $entity_type,
+        'bundle' => $bundles[$bundle_name]['label'],
+        'bundle_name' => $bundle_name,
+      );
+
+      // Create an array which only has content type names, which are not selected for group
+      $types_list[] = $bundle_name;
+    }
+    // If current content type is selected as group.
+    elseif ($is_group == 1) {
+      // Create an array which has content type with details, which are selected for group
+      $enabled_types[$entity_type . '_' . $bundle_name] = array(
+        'entity' => $entity_info[$entity_type]['label'],
+        'entity_name' => $entity_type,
+        'bundle' => $bundles[$bundle_name]['label'],
+        'bundle_name' => $bundle_name,
+      );
+
+      // Create an array which only has content type names, which are selected for group
+      $enabled_types_list[] = $bundle_name;
+    }
+  }
+
+  // sort($types);
+  // sort($enabled_types);
+
+  // Return output depending on the $class received.
+  switch ($class) {
+    case '':
+    case 'active':
+      return $types;
+      break;
+    case 'group':
+      return $enabled_types;
+      break;
+    case 'active_list':
+      return $types_list;
+      break;
+    case 'group_list':
+      return $enabled_types_list;
+      break;
+
+      // Default condition
+    default:
+      return array();
+      break;
+  }
+}
+
+/**
+ * Theme function to display the references on content types
+ *
+ * @param Array $variables
+ *   An array containing type and nid of link
+ */
+function theme_autocreategroup_title($variables) {
+  // Select type name from DB
+  $label = _autocreategroup_get_bundle_name($variables['type']);
+
+  // Select node title from DB
+  // @TODO: Title should support multilingual.
+  $query = db_select('node', 'node');
+  $query->condition('nid', $variables['nid'])
+        ->fields('node', array('title'));
+  $title = $query->execute()->fetchField();
+
+  // return output.
+  return '<div class="autocreategroup-label">' . $label .
+          ' : </div><div class="autocreategroup-title">' .
+          l($title, 'node/' . $variables['nid']) .
+          '</div>';
+}
