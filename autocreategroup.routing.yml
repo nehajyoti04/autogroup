@@ -1,0 +1,16 @@
+autocreategroup.settings_general:
+  path: /admin/config/autocreategroup
+  defaults:
+    settings: general
+    _title: AutoCreateGroup
+    _controller: '\Drupal\autocreategroup\Controller\DefaultController::autocreategroup_settings'
+  requirements:
+    _permission: 'administer autocreategroup'
+autocreategroup.settings_advanced:
+  path: /admin/config/autocreategroup/advanced
+  defaults:
+    settings: advanced
+    _title: 'Advanced Settings'
+    _controller: '\Drupal\autocreategroup\Controller\DefaultController::autocreategroup_settings'
+  requirements:
+    _permission: 'administer autocreategroup'

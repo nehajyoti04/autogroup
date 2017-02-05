@@ -1,0 +1,9 @@
+autocreategroup.settings_general:
+  route_name: autocreategroup.settings_general
+  title: 'General Settings'
+  base_route: autocreategroup.settings_general
+autocreategroup.settings_advanced:
+  route_name: autocreategroup.settings_advanced
+  title: 'Advanced Settings'
+  weight: 1
+  base_route: autocreategroup.settings_general

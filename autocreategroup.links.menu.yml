@@ -1,0 +1,4 @@
+autocreategroup.settings_general:
+  route_name: autocreategroup.settings_general
+  title: AutoCreateGroup
+  parent: system.admin_config

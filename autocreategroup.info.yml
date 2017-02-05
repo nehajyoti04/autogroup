@@ -1,0 +1,10 @@
+name: 'Automatically Create Groups'
+description: 'Automatically create a group for different content types'
+core: 8.x
+dependencies:
+  - og
+package: 'Organic groups'
+version: 7.x-1.x-dev
+project: autogroup
+datestamp: '1380554839'
+type: module
